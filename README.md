@@ -113,7 +113,7 @@ corrects.
 
 ## Deploy
 
-Single container (builds wasm + client + server):
+**Full multiplayer** — single container (builds wasm + client + server):
 
 ```sh
 docker build -t jack-of-guns .
@@ -122,6 +122,21 @@ docker run -p 8080:8080 -e SEED=1337 jack-of-guns
 
 Works as-is on Railway / Render / Fly.io (they detect the Dockerfile; the
 server honors `$PORT`). WebSockets pass through their default HTTP proxies.
+
+**GitHub Pages (client only)** — `.github/workflows/deploy-pages.yml` builds
+the static client and publishes it on every push to `main`. One-time setup:
+repo **Settings → Pages → Source: "GitHub Actions"** (the workflow also tries
+to enable this itself). Pages can't run the game server, so the Pages site
+boots into the **offline single-player sandbox** — to get multiplayer from a
+static host, deploy the server container somewhere and point the client at it:
+
+```
+https://<user>.github.io/Jack-of-Guns/?server=my-game.fly.dev
+```
+
+(`?server=` accepts `host[:port]` or a full `ws://` / `wss://` URL; pages
+served over https need a TLS-terminated `wss` server, which Railway/Render/Fly
+provide by default.)
 
 ## Roadmap (post-MVP)
 

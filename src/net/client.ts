@@ -7,6 +7,22 @@ const CONNECT_TIMEOUT_MS = 5000;
 
 export type WelcomeMsg = Extract<ServerMsg, { t: "welcome" }>;
 
+/**
+ * Game server endpoint. Same-origin `/ws` by default (the Rust server serves
+ * both). A static host (e.g. GitHub Pages) can point at an external server
+ * with `?server=my-game.fly.dev` or `?server=ws://localhost:8080` — without
+ * it the client just drops into the offline sandbox.
+ */
+function serverUrl(): string {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const override = new URLSearchParams(location.search).get("server");
+  if (override) {
+    const base = override.includes("://") ? override : `${proto}://${override}`;
+    return base.replace(/\/$/, "").endsWith("/ws") ? base : `${base.replace(/\/$/, "")}/ws`;
+  }
+  return `${proto}://${location.host}/ws`;
+}
+
 export class NetClient {
   private ws: WebSocket | null = null;
   connected = false;
@@ -15,8 +31,7 @@ export class NetClient {
   onDisconnect: (() => void) | null = null;
 
   connect(name: string, classId: number): Promise<WelcomeMsg> {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const url = `${proto}://${location.host}/ws`;
+    const url = serverUrl();
     return new Promise((resolve, reject) => {
       let settled = false;
       const fail = (why: string) => {

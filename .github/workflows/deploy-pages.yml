@@ -1,0 +1,64 @@
+name: Deploy client to GitHub Pages
+
+# Builds the static client (Rust -> WASM + Vite) and publishes dist/ to Pages.
+# Note: Pages only hosts the client. Without a game server it runs as the
+# offline single-player sandbox; point it at a hosted server (Dockerfile ->
+# Railway/Render/Fly) with https://<pages-url>/?server=<server-host>.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Add wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-bindgen-cli (prebuilt, must match Cargo.toml pin)
+        run: |
+          curl -sSfL https://github.com/rustwasm/wasm-bindgen/releases/download/0.2.123/wasm-bindgen-0.2.123-x86_64-unknown-linux-musl.tar.gz | tar xz
+          echo "$PWD/wasm-bindgen-0.2.123-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+
+      - run: npm ci
+
+      - name: Build (wasm + typecheck + vite)
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

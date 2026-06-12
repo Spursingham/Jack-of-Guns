@@ -4,6 +4,9 @@ import { defineConfig } from "vite";
 // (wasm-bindgen --target web); Vite picks the .wasm file up as an asset via
 // `new URL(..., import.meta.url)`, so no plugin is needed.
 export default defineConfig({
+  // Relative base so the build works from any path — the Rust server's root,
+  // GitHub Pages' /Jack-of-Guns/ subpath, or file hosting.
+  base: "./",
   build: {
     target: "esnext",
     chunkSizeWarningLimit: 1500,
