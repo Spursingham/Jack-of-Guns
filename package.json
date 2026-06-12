@@ -1,0 +1,25 @@
+{
+  "name": "jack-of-guns",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser voxel FPS — Ace of Spades spiritual successor (Three.js + Rust/WASM)",
+  "scripts": {
+    "wasm": "cargo build -p voxel-wasm --release --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir src/wasm/pkg target/wasm32-unknown-unknown/release/voxel_wasm.wasm",
+    "dev": "npm run wasm && vite",
+    "check": "tsc --noEmit",
+    "build": "npm run wasm && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "server": "cargo run -p server --release",
+    "smoke": "node scripts/smoke.mjs",
+    "test": "cargo test --workspace"
+  },
+  "dependencies": {
+    "three": "0.184.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.184.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}

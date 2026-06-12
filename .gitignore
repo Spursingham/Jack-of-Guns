@@ -1,0 +1,14 @@
+# Rust
+/target
+
+# Node
+node_modules
+dist
+
+# Generated WASM bindings (built by `npm run wasm`)
+/src/wasm/pkg
+
+# Misc
+.DS_Store
+*.local
+.vite

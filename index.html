@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Jack of Guns</title>
+  <style>
+    :root {
+      --hud: #e8f0e8;
+      --accent: #ffb02e;
+      --panel: rgba(12, 18, 14, 0.72);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0f0c; }
+    body { font-family: "Lucida Console", Monaco, monospace; color: var(--hud); }
+    #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+    #hud { position: fixed; inset: 0; pointer-events: none; user-select: none; }
+
+    /* Crosshair */
+    #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+    #crosshair::before, #crosshair::after {
+      content: ""; position: absolute; background: rgba(255,255,255,0.9);
+      box-shadow: 0 0 2px rgba(0,0,0,0.8);
+    }
+    #crosshair::before { width: 14px; height: 2px; left: -7px; top: -1px; }
+    #crosshair::after { width: 2px; height: 14px; left: -1px; top: -7px; }
+    #crosshair.zoomed::before, #crosshair.zoomed::after { background: rgba(255,176,46,0.95); }
+
+    #hitmarker {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(45deg);
+      font-size: 26px; color: #fff; opacity: 0; font-weight: bold; text-shadow: 0 0 3px #000;
+      transition: opacity 0.25s;
+    }
+
+    /* Vignette / damage flash / water tint */
+    #vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(180,0,0,0.55) 100%); opacity: 0; transition: opacity 0.3s; }
+    #watertint { position: absolute; inset: 0; background: rgba(30, 90, 160, 0.35); opacity: 0; }
+
+    /* Bottom-left: health */
+    #health { position: absolute; left: 18px; bottom: 18px; background: var(--panel); padding: 10px 14px; border-radius: 4px; min-width: 180px; }
+    #hpbar { height: 10px; background: #2a3a2e; border-radius: 2px; margin-top: 6px; overflow: hidden; }
+    #hpfill { height: 100%; width: 100%; background: linear-gradient(90deg, #51d06b, #8fe07a); transition: width 0.15s; }
+    #hptext { font-size: 20px; font-weight: bold; }
+
+    /* Bottom-right: ammo */
+    #ammo { position: absolute; right: 18px; bottom: 18px; background: var(--panel); padding: 10px 14px; border-radius: 4px; text-align: right; }
+    #ammotext { font-size: 24px; font-weight: bold; }
+    #ammolabel { font-size: 11px; opacity: 0.75; margin-top: 2px; letter-spacing: 1px; }
+    #blockstext { font-size: 13px; margin-top: 6px; color: #cfe3b8; }
+
+    /* Hotbar */
+    #hotbar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 6px; }
+    .slot { width: 52px; height: 52px; background: var(--panel); border: 2px solid rgba(255,255,255,0.18); border-radius: 4px; position: relative; display: flex; align-items: center; justify-content: center; font-size: 11px; text-align: center; }
+    .slot.sel { border-color: var(--accent); box-shadow: 0 0 8px rgba(255,176,46,0.5); }
+    .slot .key { position: absolute; top: 2px; left: 4px; font-size: 9px; opacity: 0.7; }
+    .slot .swatch { width: 26px; height: 26px; border-radius: 2px; box-shadow: inset 0 0 4px rgba(0,0,0,0.4); }
+    .slot .count { position: absolute; bottom: 2px; right: 4px; font-size: 9px; opacity: 0.85; }
+
+    /* Kill feed */
+    #killfeed { position: absolute; right: 16px; top: 14px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+    .kf { background: var(--panel); padding: 4px 10px; border-radius: 3px; font-size: 12px; opacity: 0.95; }
+    .kf b { color: var(--accent); }
+
+    /* Top-left status */
+    #status { position: absolute; left: 16px; top: 14px; font-size: 11px; opacity: 0.85; background: var(--panel); padding: 6px 10px; border-radius: 3px; }
+    #status .warn { color: #ff7b5e; }
+
+    /* Scoreboard */
+    #scoreboard { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); background: rgba(8,12,9,0.88); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 16px 22px; display: none; min-width: 380px; }
+    #scoreboard h3 { margin-bottom: 10px; color: var(--accent); letter-spacing: 2px; }
+    #scoreboard table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #scoreboard td, #scoreboard th { padding: 3px 10px; text-align: left; }
+    #scoreboard th { opacity: 0.6; font-size: 10px; letter-spacing: 1px; }
+    #scoreboard tr.me td { color: var(--accent); }
+
+    /* Center messages / respawn */
+    #respawn { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 14px; background: rgba(40,0,0,0.35); pointer-events: auto; }
+    #respawn h2 { font-size: 34px; text-shadow: 0 2px 8px #000; }
+    #respawn .sub { opacity: 0.9; }
+    #respawn .classes { display: flex; gap: 8px; margin-top: 8px; }
+
+    /* Start screen */
+    #start { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 35%, #1d3022 0%, #0a120d 75%); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 22px; pointer-events: auto; }
+    #start h1 { font-size: 52px; letter-spacing: 6px; color: var(--accent); text-shadow: 0 4px 0 #4a3008, 0 8px 24px #000; }
+    #start .tag { opacity: 0.7; font-size: 13px; margin-top: -14px; letter-spacing: 2px; }
+    #start input { background: #0e1810; border: 2px solid #3a523f; color: var(--hud); font: inherit; font-size: 18px; padding: 10px 14px; border-radius: 4px; text-align: center; width: 280px; outline: none; }
+    #start input:focus { border-color: var(--accent); }
+    .classes { display: flex; gap: 10px; }
+    .ccard { background: var(--panel); border: 2px solid rgba(255,255,255,0.14); border-radius: 6px; padding: 12px 14px; width: 150px; cursor: pointer; pointer-events: auto; }
+    .ccard:hover { border-color: rgba(255,255,255,0.5); }
+    .ccard.sel { border-color: var(--accent); box-shadow: 0 0 12px rgba(255,176,46,0.35); }
+    .ccard h4 { font-size: 15px; margin-bottom: 6px; }
+    .ccard p { font-size: 10px; opacity: 0.75; line-height: 1.5; }
+    #playbtn { background: var(--accent); color: #221502; border: none; font: inherit; font-weight: bold; font-size: 20px; letter-spacing: 3px; padding: 12px 54px; border-radius: 4px; cursor: pointer; }
+    #playbtn:hover { filter: brightness(1.1); }
+    #playbtn:disabled { filter: grayscale(0.8); cursor: wait; }
+    #starterr { color: #ff8a6b; font-size: 12px; min-height: 16px; }
+    #boot { font-size: 11px; opacity: 0.65; }
+
+    /* Pause hint */
+    #pause { position: absolute; left: 50%; top: 38%; transform: translateX(-50%); background: var(--panel); padding: 14px 26px; border-radius: 6px; display: none; font-size: 15px; text-align: center; line-height: 1.7; }
+    kbd { background: #2c3a2f; border-radius: 3px; padding: 1px 6px; font-size: 11px; border: 1px solid #4a5a4e; }
+
+    #fps { position: absolute; right: 16px; top: 60px; font-size: 10px; opacity: 0.6; text-align: right; }
+    #controls-hint { position: absolute; left: 16px; bottom: 110px; font-size: 10px; opacity: 0.5; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div id="watertint"></div>
+    <div id="vignette"></div>
+    <div id="crosshair"></div>
+    <div id="hitmarker">✕</div>
+
+    <div id="status"></div>
+    <div id="killfeed"></div>
+    <div id="fps"></div>
+
+    <div id="health"><div id="hptext">100</div><div id="hpbar"><div id="hpfill"></div></div></div>
+    <div id="ammo"><div id="ammotext">--</div><div id="ammolabel"></div><div id="blockstext"></div></div>
+    <div id="hotbar"></div>
+    <div id="controls-hint">WASD move &nbsp; SHIFT sprint &nbsp; C crouch<br/>LMB use &nbsp; RMB place/zoom &nbsp; R reload<br/>1-8 / wheel items &nbsp; TAB scores</div>
+
+    <div id="scoreboard"><h3>SCOREBOARD</h3><table><thead><tr><th>PLAYER</th><th>CLASS</th><th>K</th><th>D</th></tr></thead><tbody></tbody></table></div>
+
+    <div id="respawn">
+      <h2>YOU DIED</h2>
+      <div class="sub" id="killedby"></div>
+      <div class="sub" id="respawntimer"></div>
+      <div class="classes" id="respawnclasses"></div>
+    </div>
+
+    <div id="pause">GAME PAUSED<br/><span style="font-size:12px;opacity:.8">Click to capture the mouse</span></div>
+
+    <div id="start">
+      <h1>JACK OF GUNS</h1>
+      <div class="tag">A BROWSER VOXEL FPS — BUILD, DIG, FRAG</div>
+      <input id="name" maxlength="16" placeholder="Your name" autocomplete="off" />
+      <div class="classes" id="startclasses"></div>
+      <button id="playbtn">DEPLOY</button>
+      <div id="starterr"></div>
+      <div id="boot"></div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
