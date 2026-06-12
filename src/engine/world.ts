@@ -1,0 +1,122 @@
+// Owns the WASM voxel world plus one Three.js mesh per chunk.
+// Remeshing is fed by the WASM dirty queue and processed under a per-frame
+// time budget so edits/explosions never hitch the render loop for long.
+import * as THREE from "three";
+import type { VoxelWorld } from "../wasm/voxel";
+
+export const WATER_Y = 11.5; // mirror of voxel_core::WATER_Y
+
+export class ChunkRenderer {
+  private meshes = new Map<string, THREE.Mesh>();
+  private queue: [number, number, number][] = [];
+  private queued = new Set<string>();
+  private material: THREE.Material;
+  readonly group = new THREE.Group();
+
+  constructor(
+    readonly world: VoxelWorld,
+    readonly scene: THREE.Scene,
+  ) {
+    this.material = new THREE.MeshBasicMaterial({ vertexColors: true });
+    scene.add(this.group);
+    this.addWater();
+  }
+
+  get chunkSize(): number {
+    return this.world.chunk_size();
+  }
+
+  private addWater() {
+    const sx = this.world.size_x();
+    const sz = this.world.size_z();
+    const geo = new THREE.PlaneGeometry(sx, sz);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x2e6da8,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const water = new THREE.Mesh(geo, mat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(sx / 2, WATER_Y, sz / 2);
+    this.scene.add(water);
+  }
+
+  /** Queue every chunk and build progressively; resolves when done. */
+  buildAll(onProgress?: (done: number, total: number) => void): Promise<void> {
+    const [nx, ny, nz] = [this.world.chunks_x(), this.world.chunks_y(), this.world.chunks_z()];
+    for (let cy = 0; cy < ny; cy++)
+      for (let cz = 0; cz < nz; cz++)
+        for (let cx = 0; cx < nx; cx++) this.enqueue(cx, cy, cz);
+    const total = this.queue.length;
+    return new Promise((resolve) => {
+      const step = () => {
+        this.drainQueue(12);
+        onProgress?.(total - this.queue.length, total);
+        if (this.queue.length === 0) resolve();
+        else requestAnimationFrame(step);
+      };
+      step();
+    });
+  }
+
+  /** Call once per frame: pick up WASM dirty chunks and rebuild under budget. */
+  update() {
+    const dirty = this.world.take_dirty();
+    for (let i = 0; i < dirty.length; i += 3) this.enqueue(dirty[i], dirty[i + 1], dirty[i + 2]);
+    this.drainQueue(6);
+  }
+
+  private enqueue(cx: number, cy: number, cz: number) {
+    const key = `${cx},${cy},${cz}`;
+    if (this.queued.has(key)) return;
+    this.queued.add(key);
+    this.queue.push([cx, cy, cz]);
+  }
+
+  private drainQueue(budgetMs: number) {
+    const start = performance.now();
+    while (this.queue.length > 0 && performance.now() - start < budgetMs) {
+      const [cx, cy, cz] = this.queue.shift()!;
+      this.queued.delete(`${cx},${cy},${cz}`);
+      this.remesh(cx, cy, cz);
+    }
+  }
+
+  private remesh(cx: number, cy: number, cz: number) {
+    const key = `${cx},${cy},${cz}`;
+    const m = this.world.mesh_chunk(cx, cy, cz);
+    const positions = m.positions;
+    const colors = m.colors;
+    const indices = m.indices;
+    m.free();
+
+    const existing = this.meshes.get(key);
+    if (positions.length === 0) {
+      if (existing) {
+        existing.geometry.dispose();
+        this.group.remove(existing);
+        this.meshes.delete(key);
+      }
+      return;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3, true));
+    geo.setIndex(new THREE.BufferAttribute(indices, 1));
+    geo.computeBoundingSphere();
+
+    if (existing) {
+      existing.geometry.dispose();
+      existing.geometry = geo;
+    } else {
+      const mesh = new THREE.Mesh(geo, this.material);
+      const cs = this.chunkSize;
+      mesh.position.set(cx * cs, cy * cs, cz * cs);
+      this.meshes.set(key, mesh);
+      this.group.add(mesh);
+    }
+  }
+}
