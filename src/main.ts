@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { Controls } from "./engine/controls";
 import { PlayerBody } from "./engine/physics";
 import { BASE_FOV, createRenderer } from "./engine/renderer";
-import { ChunkRenderer, WATER_Y } from "./engine/world";
+import { ChunkRenderer, GROUND_Y, WATER_Y } from "./engine/world";
 import { Avatars } from "./game/avatars";
 import { panvol, sfx } from "./game/audio";
 import { Combat } from "./game/combat";
@@ -162,13 +162,15 @@ async function boot() {
   }
 
   function pickOfflineSpawn(w: VoxelWorld): [number, number, number] {
-    for (let i = 0; i < 40; i++) {
+    // Open ground only — not on top of containers, the crane or scrap heaps.
+    for (let i = 0; i < 60; i++) {
       const x = 8 + Math.floor(Math.random() * (w.size_x() - 16));
       const z = 8 + Math.floor(Math.random() * (w.size_z() - 16));
       const y = w.surface_y(x, z);
-      if (y + 1 > WATER_Y) return [x + 0.5, y + 1.05, z + 0.5];
+      if (y >= GROUND_Y && y <= GROUND_Y + 1) return [x + 0.5, y + 1.05, z + 0.5];
     }
-    return [w.size_x() / 2, w.size_y() - 4, w.size_z() / 2];
+    const c = w.size_x() / 2;
+    return [c, GROUND_Y + 1.05, c];
   }
 
   // ---- server messages ----------------------------------------------------
@@ -318,9 +320,7 @@ async function boot() {
 
   // ---- input wiring --------------------------------------------------------
   let lmbEdge = false;
-  let rmbEdge = false;
   controls.onLmbDown = () => (lmbEdge = true);
-  controls.onRmbDown = () => (rmbEdge = true);
   controls.onSlot = (i) => combat.selectSlot(i);
   controls.onWheel = (dir) => combat.cycleSlot(dir);
   controls.onKey = (code) => {
@@ -383,8 +383,8 @@ async function boot() {
     controls.sensScale = ctx.camera.fov / BASE_FOV;
 
     // Combat & world.
-    combat.update(dt, controls.lmb, controls.rmb, lmbEdge, rmbEdge, local.alive && controls.locked);
-    lmbEdge = rmbEdge = false;
+    combat.update(dt, controls.lmb, controls.rmb, lmbEdge, local.alive && controls.locked);
+    lmbEdge = false;
     chunks.update();
     avatars.update(dt);
     effects.update(dt);

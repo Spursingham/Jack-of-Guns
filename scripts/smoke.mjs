@@ -138,16 +138,17 @@ async function main() {
   await A.expect((m) => m.t === "joined" && m.name === "Bob", "A sees Bob join");
   assert(true, "A received PlayerJoined(Bob)");
 
-  // --- position both in the open air (first state after spawn is trusted) --
-  const posA = [128, 60, 120];
-  const posB = [128, 60, 125];
+  // --- position both on the scrapyard floor (first state after spawn is
+  // trusted). Map is 96x32x96, ground surface at y=3 so feet sit at y=4. --
+  const posA = [40, 4.05, 40];
+  const posB = [44, 4.05, 40];
   A.send(enc.state(posA, [0, 0, 0], 0, 0, 0));
   B.send(enc.state(posB, [0, 0, 0], 0, 0, 0));
 
   // --- snapshots ----------------------------------------------------------
   console.log("snapshots:");
   const snap = await A.expect(
-    (m) => m.t === "snapshot" && m.players.some((p) => p.id === B.id && Math.abs(p.pos[2] - 125) < 0.01),
+    (m) => m.t === "snapshot" && m.players.some((p) => p.id === B.id && Math.abs(p.pos[0] - 44) < 0.01),
     "snapshot reflecting B's reported position",
   );
   assert(snap.players.length === 2, "snapshot carries both players");
@@ -158,23 +159,26 @@ async function main() {
   const nSnaps = A.msgs.filter((m) => m.t === "snapshot").length;
   assert(nSnaps >= 12 && nSnaps <= 30, `snapshot rate ~20 Hz (got ${nSnaps} in ${Date.now() - t0}ms)`);
 
-  // --- block edits ----------------------------------------------------------
-  console.log("block edits:");
-  // Place a block right below A's reported position (in reach, mid-air).
-  // Randomized y so re-runs against a long-lived server don't collide with
-  // blocks placed by earlier runs.
-  const bx = 128, by = 56 + Math.floor(Math.random() * 3), bz = 120 + Math.floor(Math.random() * 3);
-  A.send(enc.setBlock(bx, by, bz, 7)); // brick
-  const bs = await B.expect((m) => m.t === "blockSet" && m.x === bx && m.y === by && m.z === bz, "B receives A's block placement");
-  assert(bs.b === 7, "placed block is brick");
+  // --- block destruction (building is disabled on this map) -----------------
+  console.log("block destruction:");
+  // Break a ground block within reach of A (asphalt at the surface, y=3).
+  const bx = 40, by = 3, bz = 41;
+  A.send(enc.setBlock(bx, by, bz, 0)); // 0 = AIR = destroy
+  const bs = await B.expect((m) => m.t === "blockSet" && m.x === bx && m.y === by && m.z === bz, "B sees A destroy a ground block");
+  assert(bs.b === 0, "block was destroyed (set to air)");
 
-  // Out-of-reach edit must be rejected with a corrective echo to A only.
+  // Placement must be rejected — corrective echo to A only, B sees nothing.
   B.msgs.length = 0;
-  A.send(enc.setBlock(10, 30, 10, 0));
-  const corr = await A.expect((m) => m.t === "blockSet" && m.x === 10 && m.y === 30 && m.z === 10, "A gets corrective echo for rejected edit");
-  assert(corr.b !== 0 || corr.b === 0, `corrective echo carries server truth (b=${corr.b})`);
+  A.send(enc.setBlock(41, 4, 40, 14)); // try to place STEEL
+  const corr = await A.expect((m) => m.t === "blockSet" && m.x === 41 && m.y === 4 && m.z === 40, "A gets corrective echo for rejected placement");
+  assert(corr.b === 0, `placement rejected, server says cell is still air (b=${corr.b})`);
   await sleep(300);
-  assert(!B.msgs.some((m) => m.t === "blockSet" && m.x === 10), "B does not see the rejected edit");
+  assert(!B.msgs.some((m) => m.t === "blockSet" && m.x === 41 && m.y === 4), "B never sees the rejected placement");
+
+  // Out-of-reach destruction is also rejected.
+  A.send(enc.setBlock(10, 3, 10, 0));
+  const corr2 = await A.expect((m) => m.t === "blockSet" && m.x === 10 && m.y === 3 && m.z === 10, "A gets corrective echo for out-of-reach break");
+  assert(corr2.b !== 0, `far block survives (b=${corr2.b})`);
 
   // --- anti-teleport clamp ---------------------------------------------------
   console.log("movement clamp:");
@@ -213,10 +217,11 @@ async function main() {
 
   // --- grenade → explosion → world edits in late welcome -------------------------
   console.log("grenade:");
-  // B (fresh spawn, server trusts first state) stands on known ground; lob a nade.
-  B.send(enc.state([60, 55, 60], [0, 0, 0], 0, 0, 0));
+  // B (fresh spawn, server trusts first state) stands on the yard floor and
+  // lobs a grenade that lands and craters the ground -> world edits.
+  B.send(enc.state([60, 4.05, 60], [0, 0, 0], 0, 0, 0));
   await sleep(60);
-  B.send(enc.nade([60, 56.6, 60], [2, 1, 0]));
+  B.send(enc.nade([60, 5.6, 60], [5, 1, 0]));
   await A.expect((m) => m.t === "nade" && m.owner === B.id, "A sees grenade throw");
   assert(true, "GrenadeThrown relayed");
   const boom = await A.expect((m) => m.t === "explosion", "explosion broadcast", 5000);

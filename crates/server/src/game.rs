@@ -246,15 +246,17 @@ impl Game {
     }
 
     fn pick_spawn(&mut self) -> [f32; 3] {
-        for _ in 0..40 {
+        // Spawn on open ground — not on top of containers, the crane or scrap.
+        for _ in 0..60 {
             let x = 8 + (self.rand01() * (voxel_core::SX - 16) as f32) as i32;
             let z = 8 + (self.rand01() * (voxel_core::SZ - 16) as f32) as i32;
             let y = self.world.surface_y(x, z);
-            if y as f32 + 1.0 > voxel_core::WATER_Y {
+            if (voxel_core::GROUND_Y..=voxel_core::GROUND_Y + 1).contains(&y) {
                 return [x as f32 + 0.5, y as f32 + 1.05, z as f32 + 0.5];
             }
         }
-        [voxel_core::SX as f32 / 2.0, voxel_core::SY as f32 - 4.0, voxel_core::SZ as f32 / 2.0]
+        let c = voxel_core::SX as f32 / 2.0;
+        [c, voxel_core::GROUND_Y as f32 + 1.05, c]
     }
 
     // ---- message handling ---------------------------------------------
@@ -327,22 +329,9 @@ impl Game {
         let target = [x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5];
         let cur = self.world.get(x as i32, y as i32, z as i32);
 
-        let allowed_place = matches!(
-            b,
-            blocks::DIRT | blocks::STONE | blocks::SAND | blocks::WOOD | blocks::BRICK
-        );
-        let ok = if tokens < 1.0 || dist3(target, eye) > REACH {
-            false
-        } else if b == blocks::AIR {
-            blocks::is_breakable(cur)
-        } else if allowed_place && cur == blocks::AIR {
-            // Don't allow placing a block inside any player.
-            !self.players.iter().flatten().any(|q| {
-                q.alive && aabb_overlaps_voxel(q.aabb(), x as i32, y as i32, z as i32)
-            })
-        } else {
-            false
-        };
+        // No building on this map — only destruction. Anything other than
+        // "set to air within reach" is rejected (and corrected) below.
+        let ok = b == blocks::AIR && tokens >= 1.0 && dist3(target, eye) <= REACH && blocks::is_breakable(cur);
 
         if !ok {
             // Corrective echo so a rejected client doesn't drift from us.
@@ -766,13 +755,6 @@ fn sanitize_name(s: &str) -> String {
 fn dist3(a: [f32; 3], b: [f32; 3]) -> f32 {
     let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
     (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
-}
-
-fn aabb_overlaps_voxel(aabb: ([f32; 3], [f32; 3]), x: i32, y: i32, z: i32) -> bool {
-    let (lo, hi) = aabb;
-    hi[0] > x as f32 && lo[0] < (x + 1) as f32
-        && hi[1] > y as f32 && lo[1] < (y + 1) as f32
-        && hi[2] > z as f32 && lo[2] < (z + 1) as f32
 }
 
 /// Slab-method ray vs AABB; returns entry distance if the ray hits.

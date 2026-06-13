@@ -1,8 +1,8 @@
 # Jack of Guns
 
 A browser-first multiplayer **voxel FPS** — a spiritual successor to *Ace of Spades* (0.x).
-Fully destructible/constructible terrain, four classes, rocket jumps, and instant play:
-no install, no plugins. WebGPU rendering with automatic WebGL fallback.
+A tight **scrapyard** arena with fully destructible cover, four classes, rocket jumps,
+and instant play: no install, no plugins. WebGL2 rendering (WebGPU opt-in via `?gpu`).
 
 ```
 three.js (WebGPU/WebGL)  ←→  Rust → WASM voxel core  ←→  Rust authoritative server
@@ -11,14 +11,16 @@ three.js (WebGPU/WebGL)  ←→  Rust → WASM voxel core  ←→  Rust authorit
 
 ## Features
 
-- **Voxel world** — 256×64×256 map (8×2×8 chunks of 32³), procedurally generated
-  (rolling hills, beaches, snow caps, trees, bedrock floor) from a shared seed.
+- **Scrapyard arena** — a flat 96×32×96 lot (3×1×3 chunks of 32³) generated
+  deterministically from a seed: a tower crane, a site office, shipping
+  containers, wrecked cars, scrap heaps and a corrugated perimeter fence.
 - **Greedy meshing in Rust/WASM** — coplanar faces merged into large quads, one
   draw call per chunk, lighting baked into vertex colors (the classic AoS
   flat-color look). Dirty-chunk tracking remeshes only what changed, under a
   per-frame time budget.
-- **Destructible/constructible** — DDA raycast (WASM) for dig/place/shoot;
-  explosions carve deterministic spheres replayed identically on every client.
+- **Fully destructible** — DDA raycast (WASM) for shoot/dig; guns, melee tools
+  and explosions tear the yard apart (deterministic spheres replayed identically
+  on every client). No building — only destruction.
 - **Multiplayer** — Rust (axum/tokio) authoritative server over a compact
   binary WebSocket protocol (~37 B state packets, 20 Hz snapshots, interpolated
   remote players). The server validates reach, rate, line-of-sight hitscan,
@@ -30,7 +32,7 @@ three.js (WebGPU/WebGL)  ←→  Rust → WASM voxel core  ←→  Rust authorit
   | Marksman  | Semi-auto rifle | Pistol    | RMB scope zoom                |
   | Commando  | Assault rifle   | Grenades  | Fastest sprint                |
   | Rocketeer | Rocket launcher | Pistol    | Rocket jump (low self-damage) |
-  | Miner     | Shotgun         | Pickaxe   | Insta-dig, 2× blocks & build  |
+  | Wrecker   | Shotgun         | Pickaxe   | Insta-dig pickaxe             |
 
 - **Game feel** — first-person viewmodels, tracers, debris particles, explosion
   flashes & screen shake, kill feed, scoreboard, hitmarkers, procedural WebAudio
@@ -70,8 +72,8 @@ cargo run -p server --release      # serves dist/ and /ws on :8080
 |---|---|
 | WASD / Space / Shift / C | move / jump / sprint / crouch |
 | Mouse, LMB | look, use item (shoot · dig · throw) |
-| RMB | scope (Marksman) · place block (block slots) |
-| 1–8 / wheel | hotbar: primary · secondary · spade · 5 block types |
+| RMB | scope (Marksman) |
+| 1–3 / wheel | hotbar: primary · secondary · melee tool |
 | R | reload |
 | Tab | scoreboard |
 

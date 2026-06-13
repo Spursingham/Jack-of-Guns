@@ -1,4 +1,4 @@
-use voxel_core::{blocks, explosion, gen, mesh, ray, World, CHUNK, SX, SY, SZ};
+use voxel_core::{blocks, explosion, gen, mesh, ray, World, CHUNK, GROUND_Y, SX, SY, SZ};
 
 #[test]
 fn generation_is_deterministic() {
@@ -10,14 +10,16 @@ fn generation_is_deterministic() {
 }
 
 #[test]
-fn generation_has_bedrock_floor_and_open_sky() {
+fn scrapyard_has_bedrock_floor_flat_ground_and_open_sky() {
     let w = gen::generate(7);
-    for &(x, z) in &[(0, 0), (100, 200), (SX - 1, SZ - 1)] {
-        assert_eq!(w.get(x, 0, z), blocks::BEDROCK);
-        assert_eq!(w.get(x, SY - 1, z), blocks::AIR, "sky should be open");
-        let s = w.surface_y(x, z);
-        assert!(s > 0 && s < SY - 1, "surface in range, got {s}");
+    for &(x, z) in &[(0, 0), (1, 1), (SX / 2, SZ / 2), (40, 40), (SX - 1, SZ - 1)] {
+        assert_eq!(w.get(x, 0, z), blocks::BEDROCK, "bedrock floor at {x},{z}");
+        assert_eq!(w.get(x, SY - 1, z), blocks::AIR, "open sky at {x},{z}");
+        assert!(blocks::is_solid(w.get(x, GROUND_Y, z)), "solid ground at {x},{z}");
+        assert!(w.surface_y(x, z) >= GROUND_Y, "surface at/above ground at {x},{z}");
     }
+    // The crane is the tallest thing on the map but never reaches the sky cap.
+    assert!(w.surface_y(SX / 2 - 1, SZ / 2 - 1) > GROUND_Y + 10, "crane mast is tall");
 }
 
 #[test]

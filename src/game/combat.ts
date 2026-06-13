@@ -15,7 +15,6 @@ import {
   BLOCK_COLORS,
   CLASSES,
   GRENADE,
-  MOVE,
   ROCKET,
   WEAPONS,
   Weapon,
@@ -123,7 +122,14 @@ export class Combat {
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(c.quaternion);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(c.quaternion);
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(c.quaternion);
-    return this.d.body.eye().addScaledVector(right, 0.22).addScaledVector(up, -0.14).addScaledVector(fwd, 0.4);
+    // The viewmodel sits at camera-space ~(0.28, -0.26, -0.55) with the barrel
+    // pointing forward; place the muzzle at the barrel TIP (well out in front)
+    // so tracers leave the end of the gun, not the side of it.
+    return this.d.body
+      .eye()
+      .addScaledVector(right, 0.28)
+      .addScaledVector(up, -0.2)
+      .addScaledVector(fwd, 1.0);
   }
 
   reload() {
@@ -139,8 +145,8 @@ export class Combat {
     this.d.viewmodel.reloadDip();
   }
 
-  /** Called every frame with input state. `lmbEdge`/`rmbEdge` = pressed this frame. */
-  update(dt: number, lmbHeld: boolean, rmbHeld: boolean, lmbEdge: boolean, rmbEdge: boolean, alive: boolean) {
+  /** Called every frame with input state. `lmbEdge` = pressed this frame. */
+  update(dt: number, lmbHeld: boolean, rmbHeld: boolean, lmbEdge: boolean, alive: boolean) {
     const now = performance.now() / 1000;
 
     // Finish reloads.
@@ -157,16 +163,14 @@ export class Combat {
       const zoomable = slot.kind === "weapon" && WEAPONS[slot.weapon].zoom !== undefined;
       this.zoomed = zoomable && rmbHeld;
 
-      // Fire logic.
+      // Fire logic. (No building on this map — destruction comes from guns,
+      // melee tools and explosions.)
       if (slot.kind === "weapon") {
         const def = WEAPONS[slot.weapon];
         const wantFire = def.auto ? lmbHeld : lmbEdge;
         if (wantFire) this.tryUseWeapon(slot.weapon, now);
       } else if (slot.kind === "grenade") {
         if (lmbEdge) this.tryThrowGrenade(now);
-      } else if (slot.kind === "block") {
-        if (lmbHeld) this.tryDig(now, 0.45);
-        if (rmbHeld || rmbEdge) this.tryPlace(slot.block, now);
       }
     } else {
       this.zoomed = false;
@@ -192,10 +196,8 @@ export class Combat {
     } else if (s.kind === "grenade") {
       this.d.hud.setAmmo(`${this.grenades}`, "Grenades");
     } else {
-      this.d.hud.setAmmo(`${this.blocks}`, `${s.name} — RMB place / LMB dig`);
+      this.d.hud.setAmmo("--", "Tool");
     }
-    const cap = CLASSES[this.classId].blockCap;
-    this.d.hud.setBlocks(this.blocks, cap);
   }
 
   // ---- weapons ---------------------------------------------------------
@@ -276,6 +278,8 @@ export class Combat {
       }
     }
 
+    // Muzzle flash at the barrel tip.
+    this.d.effects.burst(muzzle, [255, 224, 130], 4, 2.2, 0.05);
     this.d.net.sendShoot(w, { x: eye.x, y: eye.y, z: eye.z }, { x: dir.x, y: dir.y, z: dir.z }, seed);
     sfx.shoot(w);
     this.d.viewmodel.recoil(w === Weapon.Shotgun ? 1.4 : w === Weapon.Rifle ? 1 : 0.45);
@@ -296,60 +300,12 @@ export class Combat {
         const color = BLOCK_COLORS[id] ?? [120, 120, 120];
         this.d.world.set_block(bx, by, bz, Block.Air);
         this.d.net.sendSetBlock(bx, by, bz, Block.Air);
-        const cap = CLASSES[this.classId].blockCap;
-        this.blocks = Math.min(cap, this.blocks + 1);
         this.d.effects.burst(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5), color, 14, 3.5);
         sfx.break();
       }
     }
     // Server checks players along the melee ray.
     this.d.net.sendShoot(w, { x: eye.x, y: eye.y, z: eye.z }, { x: dir.x, y: dir.y, z: dir.z }, 0);
-  }
-
-  private tryDig(now: number, cd: number) {
-    if (now < this.cooldownUntil) return;
-    const { eye, dir } = this.eyeDir();
-    const hit = this.d.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, MOVE.reach);
-    if (hit.length === 0) return;
-    this.cooldownUntil = now + cd;
-    const bx = hit[0], by = hit[1], bz = hit[2];
-    if (!this.d.world.is_breakable(bx, by, bz)) return;
-    const id = this.d.world.get_block(bx, by, bz);
-    this.d.world.set_block(bx, by, bz, Block.Air);
-    this.d.net.sendSetBlock(bx, by, bz, Block.Air);
-    const cap = CLASSES[this.classId].blockCap;
-    this.blocks = Math.min(cap, this.blocks + 1);
-    this.d.effects.burst(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5), BLOCK_COLORS[id] ?? [120, 120, 120], 12, 3.5);
-    sfx.break();
-    this.d.viewmodel.recoil(0.5);
-  }
-
-  private tryPlace(block: Block, now: number) {
-    if (now < this.cooldownUntil || this.blocks <= 0) return;
-    const { eye, dir } = this.eyeDir();
-    const hit = this.d.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, MOVE.reach);
-    if (hit.length === 0) return;
-    const [bx, by, bz, nx, ny, nz] = hit;
-    if (nx === 0 && ny === 0 && nz === 0) return;
-    const px = bx + nx, py = by + ny, pz = bz + nz;
-    if (px < 0 || py < 0 || pz < 0 || px >= this.d.world.size_x() || py >= this.d.world.size_y() || pz >= this.d.world.size_z()) return;
-    if (this.d.world.get_block(px, py, pz) !== Block.Air) return;
-    // Don't entomb yourself.
-    const b = this.d.body;
-    if (
-      px + 1 > b.pos.x - MOVE.bodyHalfW && px < b.pos.x + MOVE.bodyHalfW &&
-      py + 1 > b.pos.y && py < b.pos.y + b.height &&
-      pz + 1 > b.pos.z - MOVE.bodyHalfW && pz < b.pos.z + MOVE.bodyHalfW
-    ) {
-      return;
-    }
-    const buildCd = 0.24 * CLASSES[this.classId].buildCdMult;
-    this.cooldownUntil = now + buildCd;
-    this.blocks--;
-    this.d.world.set_block(px, py, pz, block);
-    this.d.net.sendSetBlock(px, py, pz, block);
-    sfx.place();
-    this.d.viewmodel.recoil(0.3);
   }
 
   private tryThrowGrenade(now: number) {

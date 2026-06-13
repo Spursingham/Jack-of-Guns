@@ -4,7 +4,8 @@
 import * as THREE from "three";
 import type { VoxelWorld } from "../wasm/voxel";
 
-export const WATER_Y = 11.5; // mirror of voxel_core::WATER_Y
+export const WATER_Y = 0.0; // mirror of voxel_core::WATER_Y (no water on this map)
+export const GROUND_Y = 3; // mirror of voxel_core::GROUND_Y (flat scrapyard floor)
 
 export class ChunkRenderer {
   private meshes = new Map<string, THREE.Mesh>();
@@ -19,28 +20,10 @@ export class ChunkRenderer {
   ) {
     this.material = new THREE.MeshBasicMaterial({ vertexColors: true });
     scene.add(this.group);
-    this.addWater();
   }
 
   get chunkSize(): number {
     return this.world.chunk_size();
-  }
-
-  private addWater() {
-    const sx = this.world.size_x();
-    const sz = this.world.size_z();
-    const geo = new THREE.PlaneGeometry(sx, sz);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0x2e6da8,
-      transparent: true,
-      opacity: 0.55,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const water = new THREE.Mesh(geo, mat);
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(sx / 2, WATER_Y, sz / 2);
-    this.scene.add(water);
   }
 
   /** Queue every chunk and build progressively; resolves when done. */

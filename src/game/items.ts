@@ -57,7 +57,9 @@ export const WEAPON_KILL_NAME: Record<number, string> = {
   [CAUSE_ROCKET]: "rocket",
 };
 
-// Block ids — mirror crates/voxel-core/src/blocks.rs.
+// Block ids — mirror crates/voxel-core/src/blocks.rs. Colors here are only
+// used for debris particles / HUD; the rendered world colors come from the
+// Rust mesher.
 export enum Block {
   Air = 0,
   Grass = 1,
@@ -69,6 +71,17 @@ export enum Block {
   Brick = 7,
   Snow = 8,
   Bedrock = 9,
+  Asphalt = 10,
+  Gravel = 11,
+  Concrete = 12,
+  Rust = 13,
+  Steel = 14,
+  Hazard = 15,
+  CarRed = 16,
+  CarBlue = 17,
+  ContainerGreen = 18,
+  Window = 19,
+  Tire = 20,
 }
 
 export const BLOCK_COLORS: Record<number, [number, number, number]> = {
@@ -81,15 +94,18 @@ export const BLOCK_COLORS: Record<number, [number, number, number]> = {
   [Block.Brick]: [188, 74, 60],
   [Block.Snow]: [235, 240, 244],
   [Block.Bedrock]: [48, 48, 52],
+  [Block.Asphalt]: [58, 60, 66],
+  [Block.Gravel]: [120, 110, 96],
+  [Block.Concrete]: [166, 164, 156],
+  [Block.Rust]: [150, 82, 48],
+  [Block.Steel]: [120, 128, 136],
+  [Block.Hazard]: [222, 184, 44],
+  [Block.CarRed]: [172, 56, 46],
+  [Block.CarBlue]: [54, 86, 150],
+  [Block.ContainerGreen]: [74, 112, 74],
+  [Block.Window]: [78, 104, 120],
+  [Block.Tire]: [30, 30, 34],
 };
-
-export const PLACEABLE: { block: Block; name: string }[] = [
-  { block: Block.Dirt, name: "Dirt" },
-  { block: Block.Stone, name: "Stone" },
-  { block: Block.Sand, name: "Sand" },
-  { block: Block.Wood, name: "Wood" },
-  { block: Block.Brick, name: "Brick" },
-];
 
 export interface ClassDef {
   id: number;
@@ -108,7 +124,7 @@ export const CLASSES: ClassDef[] = [
   { id: 0, name: "Marksman", color: 0x4c8f3c, primary: Weapon.Rifle, secondary: Weapon.Pistol, tool: Weapon.Spade, sprintMult: 1.35, blockCap: 100, buildCdMult: 1, perk: "RMB scope zoom" },
   { id: 1, name: "Commando", color: 0xb06a2c, primary: Weapon.AR, secondary: "grenade", tool: Weapon.Spade, sprintMult: 1.6, blockCap: 100, buildCdMult: 1, perk: "Fast sprint, 4 grenades" },
   { id: 2, name: "Rocketeer", color: 0xa03838, primary: Weapon.Rocket, secondary: Weapon.Pistol, tool: Weapon.Spade, sprintMult: 1.35, blockCap: 100, buildCdMult: 1, perk: "Rocket jump (low self-dmg)" },
-  { id: 3, name: "Miner", color: 0xc8a032, primary: Weapon.Shotgun, secondary: Weapon.Pickaxe, tool: Weapon.Pickaxe, sprintMult: 1.35, blockCap: 200, buildCdMult: 0.5, perk: "Insta-dig, 2x blocks & build" },
+  { id: 3, name: "Wrecker", color: 0xc8a032, primary: Weapon.Shotgun, secondary: Weapon.Pickaxe, tool: Weapon.Pickaxe, sprintMult: 1.35, blockCap: 200, buildCdMult: 0.5, perk: "Shotgun + insta-dig pickaxe" },
 ];
 
 export type Slot =
@@ -121,8 +137,7 @@ export function slotsFor(classId: number): Slot[] {
   const slots: Slot[] = [{ kind: "weapon", weapon: c.primary }];
   if (c.secondary === "grenade") slots.push({ kind: "grenade" });
   else if (c.secondary !== c.tool) slots.push({ kind: "weapon", weapon: c.secondary });
-  slots.push({ kind: "weapon", weapon: c.tool });
-  for (const p of PLACEABLE) slots.push({ kind: "block", block: p.block, name: p.name });
+  slots.push({ kind: "weapon", weapon: c.tool }); // melee digging tool
   return slots;
 }
 
