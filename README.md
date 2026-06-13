@@ -54,7 +54,8 @@ npm run dev      # vite on :5173, /ws proxied to the server
 ```
 
 Open `http://localhost:5173`, pick a name + class, **DEPLOY**. Open a second
-tab for instant multiplayer. Append `?gl` to force the WebGL path.
+tab for instant multiplayer. Rendering uses WebGL2 by default; append `?gpu`
+to try the experimental WebGPU backend (or `?gl` to pin WebGL explicitly).
 
 Production:
 

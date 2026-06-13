@@ -65,6 +65,7 @@ async function boot() {
 
   const chunks = new ChunkRenderer(world, ctx.scene);
   await chunks.buildAll((done, total) => hud.bootMsg(`meshing terrain… ${done}/${total}`));
+  console.log(`[jog] renderer=${ctx.backend}, built ${chunks.meshCount} chunk meshes, surface y(center)=${world.surface_y(world.size_x() >> 1, world.size_z() >> 1)}`);
 
   // ---- actors ------------------------------------------------------------
   const controls = new Controls(canvas);
@@ -345,6 +346,7 @@ async function boot() {
   let fpsTime = 0;
   const PHYS_DT = 1 / 120;
   let accum = 0;
+  let renderErrorShown = false;
 
   function frameLoop(now: number) {
     requestAnimationFrame(frameLoop);
@@ -441,7 +443,16 @@ async function boot() {
     }
 
     effects.applyShake(ctx.camera);
-    ctx.renderer.render(ctx.scene, ctx.camera);
+    try {
+      ctx.renderer.render(ctx.scene, ctx.camera);
+    } catch (err) {
+      // A render-loop throw must never leave a silent blank screen.
+      if (!renderErrorShown) {
+        renderErrorShown = true;
+        console.error("[jog] render error:", err);
+        hud.setStatus(`<span class="warn">RENDER ERROR</span> — ${escapeHtml(String((err as Error)?.message ?? err))} (try ?gl)`);
+      }
+    }
   }
   requestAnimationFrame(frameLoop);
 }

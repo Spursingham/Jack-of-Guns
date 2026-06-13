@@ -1,5 +1,7 @@
-// Renderer bootstrap: WebGPU first (Three WebGPURenderer), automatic
-// fallback to WebGL2. Both paths expose the same Three.js API surface.
+// Renderer bootstrap. WebGL2 is the default (rock-solid with our flat-color
+// vertex geometry on every browser). WebGPU is opt-in via `?gpu` — its node
+// material path is still maturing, so we don't make it the default. Both
+// expose the same Three.js API surface.
 import * as THREE from "three";
 
 export interface RenderCtx {
@@ -13,11 +15,17 @@ const SKY = 0x9cc8e0;
 export const BASE_FOV = 72;
 
 export async function createRenderer(canvas: HTMLCanvasElement): Promise<RenderCtx> {
-  const forceGL = new URLSearchParams(location.search).has("gl");
+  // Flat hand-authored colors: show them as-is instead of through the sRGB
+  // working-space conversion, so the voxel art looks the same everywhere.
+  THREE.ColorManagement.enabled = false;
+
+  const params = new URLSearchParams(location.search);
+  const forceGL = params.has("gl");
+  const tryGPU = params.has("gpu"); // opt-in; WebGL2 is the reliable default
   let renderer: THREE.WebGLRenderer | null = null;
   let backend: "webgpu" | "webgl" = "webgl";
 
-  if (!forceGL && "gpu" in navigator) {
+  if (!forceGL && tryGPU && "gpu" in navigator) {
     try {
       const { WebGPURenderer } = await import("three/webgpu");
       const r = new WebGPURenderer({ canvas, antialias: true });

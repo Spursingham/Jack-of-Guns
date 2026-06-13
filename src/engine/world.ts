@@ -88,7 +88,7 @@ export class ChunkRenderer {
     const key = `${cx},${cy},${cz}`;
     const m = this.world.mesh_chunk(cx, cy, cz);
     const positions = m.positions;
-    const colors = m.colors;
+    const colorsU8 = m.colors;
     const indices = m.indices;
     m.free();
 
@@ -102,9 +102,14 @@ export class ChunkRenderer {
       return;
     }
 
+    // Float32 0..1 vertex colors: works identically on WebGL2 and the WebGPU
+    // node-material path (a normalized Uint8 attribute is ambiguous on WebGPU).
+    const colors = new Float32Array(colorsU8.length);
+    for (let i = 0; i < colorsU8.length; i++) colors[i] = colorsU8[i] / 255;
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3, true));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.setIndex(new THREE.BufferAttribute(indices, 1));
     geo.computeBoundingSphere();
 
@@ -118,5 +123,10 @@ export class ChunkRenderer {
       this.meshes.set(key, mesh);
       this.group.add(mesh);
     }
+  }
+
+  /** Number of chunk meshes currently in the scene (diagnostics). */
+  get meshCount(): number {
+    return this.meshes.size;
   }
 }
